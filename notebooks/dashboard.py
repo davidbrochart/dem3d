@@ -23,7 +23,6 @@ class Dashboard:
         self.dem2d = dem2d
         self.dem3d = dem3d
         self.tile_dir = 'dem_tiles'
-        #plt.ioff()
 
     def start(self):
         self.draw_control = DrawControl()
@@ -75,10 +74,8 @@ class Dashboard:
     def show_dem2d(self, dem):
         fig = dem.plot.imshow()
         with self.dem2d:
-            #plt.ion()
             display(fig)
             plt.show()
-        #plt.ioff()
 
     def show_dem3d(self, dem):
         nr = len(dem.y)
