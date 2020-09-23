@@ -3,7 +3,7 @@ import shutil
 import json
 import zipfile
 from math import ceil, floor
-from tqdm import tqdm
+from tqdm.notebook import tqdm
 import requests
 from ipyleaflet import Map, basemaps
 from osgeo import gdal
@@ -18,8 +18,9 @@ from IPython.display import display
 
 class Dashboard:
 
-    def __init__(self, m, dem2d, dem3d):
+    def __init__(self, m, notif, dem2d, dem3d):
         self.map = m
+        self.notif = notif
         self.dem2d = dem2d
         self.dem3d = dem3d
         self.tile_dir = 'dem_tiles'
@@ -148,19 +149,20 @@ class Dashboard:
             adffile = os.path.join(self.tile_dir, name, name, 'w001001.adf')
             zipfname = os.path.join(self.tile_dir, filename)
 
-            if os.path.exists(adffile):
-                print('Already downloaded ' + adffile)
-            else:
-                print('Downloading ' + url)
-                r = requests.get(url, stream=True)
-                with open(zipfname, 'wb') as f:
-                    total_length = int(r.headers.get('content-length'))
-                    for chunk in tqdm(r.iter_content(chunk_size=1024), total=(total_length/1024) + 1):
-                        if chunk:
-                            f.write(chunk)
-                            f.flush()
-                zip = zipfile.ZipFile(zipfname)
-                zip.extractall(self.tile_dir)
+            with self.notif:
+                if os.path.exists(adffile):
+                    print('Already downloaded ' + adffile)
+                else:
+                    print('Downloading ' + url)
+                    r = requests.get(url, stream=True)
+                    with open(zipfname, 'wb') as f:
+                        total_length = int(r.headers.get('content-length'))
+                        for chunk in tqdm(r.iter_content(chunk_size=1024), total=(total_length/1024) + 1):
+                            if chunk:
+                                f.write(chunk)
+                                f.flush()
+                    zip = zipfile.ZipFile(zipfname)
+                    zip.extractall(self.tile_dir)
 
             dem = gdal.Open(adffile)
             geo = dem.GetGeoTransform()
