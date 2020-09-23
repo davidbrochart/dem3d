@@ -73,7 +73,7 @@ class Dashboard:
         self.show_dem3d(dem)
 
     def show_dem2d(self, dem):
-        fig = dem.plot.imshow()
+        fig = dem.plot.imshow(vmin=np.nanmin(dem), vmax=np.nanmax(dem))
         with self.dem2d:
             display(fig)
             plt.show()
@@ -100,7 +100,7 @@ class Dashboard:
         vertices = np.empty((nr, nc, 3))
         vertices[:, :, 0] = xx * np.pi / 180
         vertices[:, :, 1] = yy * np.pi / 180
-        vertices[:, :, 2] = dem.values
+        vertices[:, :, 2] = np.where(np.isnan(dem.values), 0, dem.values)
 
         lon = np.copy(vertices[:, :, 0])
         lat = np.copy(vertices[:, :, 1])
@@ -121,7 +121,7 @@ class Dashboard:
             data={'height': [height_component]}
         )
 
-        colored_mesh = IsoColor(mesh, input=('height', 'value'), min=np.min(dem.values), max=np.max(dem.values))
+        colored_mesh = IsoColor(mesh, input=('height', 'value'), min=np.nanmin(dem.values), max=np.nanmax(dem.values))
 
         with self.dem3d:
             display(Scene([colored_mesh]))
