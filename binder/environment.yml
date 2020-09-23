@@ -1,0 +1,14 @@
+name: dem3d
+channels:
+  - conda-forge
+dependencies:
+  - voila
+  - nbserverproxy
+  - ipyleaflet
+  - xarray
+  - ipygany
+  - matplotlib
+  - gdal
+  - zarr
+  - requests
+  - tqdm
