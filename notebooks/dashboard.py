@@ -82,9 +82,18 @@ class Dashboard:
         nr = len(dem.y)
         nc = len(dem.x)
 
-        triangle_indices = np.empty((nr - 1, nc - 1, 2, 3), dtype=int)
+        if nr * nc <= 256:
+            dtype = 'uint8'
+        elif nr * nc <= 65536:
+            dtype = 'uint16'
+        elif nr * nc <= 4294967296:
+            dtype = 'uint32'
+        else:
+            raise RuntimeError('Too much data!')
 
-        r = np.arange(nr * nc).reshape(nr, nc)
+        triangle_indices = np.empty((nr - 1, nc - 1, 2, 3), dtype=dtype)
+
+        r = np.arange(nr * nc, dtype=dtype).reshape(nr, nc)
 
         triangle_indices[:, :, 0, 0] = r[:-1, :-1]
         triangle_indices[:, :, 1, 0] = r[:-1, 1:]
@@ -95,18 +104,13 @@ class Dashboard:
 
         triangle_indices.shape = (-1, 3)
 
-        xx, yy = np.meshgrid(dem.x, dem.y, sparse=True)
+        lon, lat = np.meshgrid(dem.x * np.pi / 180, dem.y * np.pi / 180, sparse=True)
 
-        vertices = np.empty((nr, nc, 3))
-        vertices[:, :, 0] = xx * np.pi / 180
-        vertices[:, :, 1] = yy * np.pi / 180
-        vertices[:, :, 2] = np.where(np.isnan(dem.values), 0, dem.values)
+        vertices = np.empty((nr, nc, 3), dtype='float32')
 
-        lon = np.copy(vertices[:, :, 0])
-        lat = np.copy(vertices[:, :, 1])
-        alt = np.copy(vertices[:, :, 2])
+        alt = np.where(np.isnan(dem.values), 0, dem.values)
         r = 6371e3  # Earth's radius in meters
-        f = (alt + r) / r  # normalized factor
+        f = alt + r
         vertices[:, :, 0] = np.sin(np.pi / 2 - lat) * np.cos(lon) * f
         vertices[:, :, 1] = np.sin(np.pi / 2 - lat) * np.sin(lon) * f
         vertices[:, :, 2] = np.cos(np.pi / 2 - lat) * f
