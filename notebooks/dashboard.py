@@ -40,6 +40,8 @@ class Dashboard:
         self.map.add_control(self.draw_control)
 
     def show_dem(self, *args, **kwargs):
+        self.dem2d.clear_output()
+        self.dem3d.clear_output()
         lonlat = self.draw_control.last_draw['geometry']['coordinates'][0]
         lats = [ll[1] for ll in lonlat]
         lons = [ll[0] for ll in lonlat]
@@ -82,6 +84,7 @@ class Dashboard:
         with self.dem2d:
             display(fig)
             plt.show()
+        self.notif.clear_output()
 
     def show_dem3d(self, dem):
         nr = len(dem.y)
@@ -149,20 +152,17 @@ class Dashboard:
             adffile = os.path.join(self.tile_dir, name, name, 'w001001.adf')
             zipfname = os.path.join(self.tile_dir, filename)
 
-            with self.notif:
-                if os.path.exists(adffile):
-                    print('Already downloaded ' + adffile)
-                else:
-                    print('Downloading ' + url)
-                    r = requests.get(url, stream=True)
-                    with open(zipfname, 'wb') as f:
-                        total_length = int(r.headers.get('content-length'))
+            if not os.path.exists(adffile):
+                r = requests.get(url, stream=True)
+                with open(zipfname, 'wb') as f:
+                    total_length = int(r.headers.get('content-length'))
+                    with self.notif:
                         for chunk in tqdm(r.iter_content(chunk_size=1024), total=ceil(total_length/1024)):
                             if chunk:
                                 f.write(chunk)
                                 f.flush()
-                    zip = zipfile.ZipFile(zipfname)
-                    zip.extractall(self.tile_dir)
+                zip = zipfile.ZipFile(zipfname)
+                zip.extractall(self.tile_dir)
 
             dem = gdal.Open(adffile)
             geo = dem.GetGeoTransform()
