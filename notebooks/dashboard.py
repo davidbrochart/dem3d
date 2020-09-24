@@ -82,18 +82,9 @@ class Dashboard:
         nr = len(dem.y)
         nc = len(dem.x)
 
-        if nr * nc <= 256:
-            dtype = 'uint8'
-        elif nr * nc <= 65536:
-            dtype = 'uint16'
-        elif nr * nc <= 4294967296:
-            dtype = 'uint32'
-        else:
-            raise RuntimeError('Too much data!')
+        triangle_indices = np.empty((nr - 1, nc - 1, 2, 3), dtype='uint32')
 
-        triangle_indices = np.empty((nr - 1, nc - 1, 2, 3), dtype=dtype)
-
-        r = np.arange(nr * nc, dtype=dtype).reshape(nr, nc)
+        r = np.arange(nr * nc, dtype='uint32').reshape(nr, nc)
 
         triangle_indices[:, :, 0, 0] = r[:-1, :-1]
         triangle_indices[:, :, 1, 0] = r[:-1, 1:]
