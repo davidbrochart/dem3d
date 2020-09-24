@@ -3,6 +3,7 @@ import shutil
 import json
 import zipfile
 from math import ceil, floor
+import concurrent.futures
 from tqdm.notebook import tqdm
 import requests
 from ipyleaflet import Map, basemaps
@@ -58,14 +59,18 @@ class Dashboard:
             shutil.rmtree(zarr_path)
         z = zarr.open(zarr_path, mode='w', shape=(ny, nx), chunks=(6000, 6000), dtype='float32')
         done = False
-        while not done:
-            self.make_zarr(lat, lon, tiles, lat0, lat1, lon0, lon1, z)
-            lon += 5
-            if lon >= ln1:
-                lon = lon0
-                lat += 5
-                if lat >= lt1:
-                    done = True
+        tasks = []
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            while not done:
+                tasks.append(executor.submit(self.create_zarr_chunk, lat, lon, tiles, lat0, lat1, lon0, lon1, z))
+                lon += 5
+                if lon >= ln1:
+                    lon = lon0
+                    lat += 5
+                    if lat >= lt1:
+                        done = True
+            for task in tasks:
+                task.result()
         y = np.arange(lat0, lat1, 5 / 6000)
         x = np.arange(lon0, lon1, 5 / 6000)
         dem = xr.DataArray(z, coords=[y, x], dims=['y', 'x']).sel(y=slice(lt0, lt1), x=slice(ln0, ln1))
@@ -121,7 +126,7 @@ class Dashboard:
         with self.dem3d:
             display(Scene([colored_mesh]))
 
-    def make_zarr(self, lat, lon, tiles, lat0, lat1, lon0, lon1, z):
+    def create_zarr_chunk(self, lat, lon, tiles, lat0, lat1, lon0, lon1, z):
         if lat < 0:
             fname = 's'
         else:
@@ -152,7 +157,7 @@ class Dashboard:
                     r = requests.get(url, stream=True)
                     with open(zipfname, 'wb') as f:
                         total_length = int(r.headers.get('content-length'))
-                        for chunk in tqdm(r.iter_content(chunk_size=1024), total=(total_length/1024) + 1):
+                        for chunk in tqdm(r.iter_content(chunk_size=1024), total=ceil(total_length/1024)):
                             if chunk:
                                 f.write(chunk)
                                 f.flush()
