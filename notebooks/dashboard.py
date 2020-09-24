@@ -14,7 +14,7 @@ import xarray as xr
 from ipygany import Scene, PolyMesh, IsoColor, Component
 from ipyleaflet import DrawControl
 import matplotlib.pyplot as plt
-from IPython.display import display
+from IPython.display import display, FileLink
 
 
 class Dashboard:
@@ -80,46 +80,43 @@ class Dashboard:
         self.show_dem3d(dem)
 
     def show_dem2d(self, dem):
+        nr, nc = len(dem.y), len(dem.x)
+        lon, lat = np.meshgrid(dem.x * np.pi / 180, dem.y * np.pi / 180, sparse=True)
+        self.vertices = np.empty((nr, nc, 3), dtype='float32')
+        alt = np.where(np.isnan(dem.values), 0, dem.values)
+        r = 6371e3  # Earth's radius in meters
+        f = alt + r
+        self.vertices[:, :, 0] = np.sin(np.pi / 2 - lat) * np.cos(lon) * f
+        self.vertices[:, :, 1] = np.sin(np.pi / 2 - lat) * np.sin(lon) * f
+        self.vertices[:, :, 2] = np.cos(np.pi / 2 - lat) * f
+        self.vertices = self.vertices.reshape(nr * nc, 3)
+
+        self.notif.clear_output()
+        np.savez('dem.npz', dem=self.vertices)
+        local_file = FileLink('dem.npz', result_html_prefix="Click here to download: ")
+        with self.notif:
+            display(local_file)
+
         fig = dem.plot.imshow(vmin=np.nanmin(dem), vmax=np.nanmax(dem))
         with self.dem2d:
             display(fig)
             plt.show()
-        self.notif.clear_output()
 
     def show_dem3d(self, dem):
-        nr = len(dem.y)
-        nc = len(dem.x)
-
+        nr, nc = len(dem.y), len(dem.x)
         triangle_indices = np.empty((nr - 1, nc - 1, 2, 3), dtype='uint32')
-
         r = np.arange(nr * nc, dtype='uint32').reshape(nr, nc)
-
         triangle_indices[:, :, 0, 0] = r[:-1, :-1]
         triangle_indices[:, :, 1, 0] = r[:-1, 1:]
         triangle_indices[:, :, 0, 1] = r[:-1, 1:]
-
         triangle_indices[:, :, 1, 1] = r[1:, 1:]
         triangle_indices[:, :, :, 2] = r[1:, :-1, None]
-
         triangle_indices.shape = (-1, 3)
-
-        lon, lat = np.meshgrid(dem.x * np.pi / 180, dem.y * np.pi / 180, sparse=True)
-
-        vertices = np.empty((nr, nc, 3), dtype='float32')
-
-        alt = np.where(np.isnan(dem.values), 0, dem.values)
-        r = 6371e3  # Earth's radius in meters
-        f = alt + r
-        vertices[:, :, 0] = np.sin(np.pi / 2 - lat) * np.cos(lon) * f
-        vertices[:, :, 1] = np.sin(np.pi / 2 - lat) * np.sin(lon) * f
-        vertices[:, :, 2] = np.cos(np.pi / 2 - lat) * f
-
-        vertices = vertices.reshape(nr * nc, 3)
 
         height_component = Component(name='value', array=dem.values)
 
         mesh = PolyMesh(
-            vertices=vertices,
+            vertices=self.vertices,
             triangle_indices=triangle_indices,
             data={'height': [height_component]}
         )
@@ -156,6 +153,7 @@ class Dashboard:
                 r = requests.get(url, stream=True)
                 with open(zipfname, 'wb') as f:
                     total_length = int(r.headers.get('content-length'))
+                    self.notif.clear_output()
                     with self.notif:
                         for chunk in tqdm(r.iter_content(chunk_size=1024), total=ceil(total_length/1024)):
                             if chunk:
