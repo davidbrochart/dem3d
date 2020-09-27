@@ -9,10 +9,12 @@ import requests
 from ipyleaflet import Map, basemaps
 from osgeo import gdal
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 import zarr
 import xarray as xr
 from ipygany import Scene, PolyMesh, IsoColor, Component
 from ipyleaflet import DrawControl
+from ipyspin import Spinner
 import matplotlib.pyplot as plt
 from IPython.display import display, FileLink
 
@@ -25,6 +27,9 @@ class Dashboard:
         self.dem2d = dem2d
         self.dem3d = dem3d
         self.tile_dir = 'dem_tiles'
+        self.spin = Spinner()
+        self.spin.layout.height = '500px'
+        self.spin.layout.width = '500px'
 
     def start(self):
         self.draw_control = DrawControl()
@@ -42,6 +47,10 @@ class Dashboard:
     def show_dem(self, *args, **kwargs):
         self.dem2d.clear_output()
         self.dem3d.clear_output()
+        with self.dem2d:
+            display(self.spin)
+        with self.dem3d:
+            display(self.spin)
         lonlat = self.draw_control.last_draw['geometry']['coordinates'][0]
         lats = [ll[1] for ll in lonlat]
         lons = [ll[0] for ll in lonlat]
@@ -76,20 +85,27 @@ class Dashboard:
         y = np.arange(lat0, lat1, 5 / 6000)
         x = np.arange(lon0, lon1, 5 / 6000)
         dem = xr.DataArray(z, coords=[y, x], dims=['y', 'x']).sel(y=slice(lt0, lt1), x=slice(ln0, ln1))
+        self.download_link(dem)
         self.show_dem2d(dem)
         self.show_dem3d(dem)
 
-    def show_dem2d(self, dem):
+    def download_link(self, dem):
+        lon, lat = np.meshgrid(np.radians(dem.x), np.radians(dem.y), sparse=True)
+        alt = np.where(np.isnan(dem.values), 0, dem.values) + 6371e3
+
         nr, nc = len(dem.y), len(dem.x)
-        lon, lat = np.meshgrid(dem.x * np.pi / 180, dem.y * np.pi / 180, sparse=True)
+
         self.vertices = np.empty((nr, nc, 3), dtype='float32')
-        alt = np.where(np.isnan(dem.values), 0, dem.values)
-        r = 6371e3  # Earth's radius in meters
-        f = alt + r
-        self.vertices[:, :, 0] = np.sin(np.pi / 2 - lat) * np.cos(lon) * f
-        self.vertices[:, :, 1] = np.sin(np.pi / 2 - lat) * np.sin(lon) * f
-        self.vertices[:, :, 2] = np.cos(np.pi / 2 - lat) * f
+        self.vertices[:, :, 0] = alt * np.cos(lat) * np.cos(lon)
+        self.vertices[:, :, 1] = alt * np.cos(lat) * np.sin(lon)
+        self.vertices[:, :, 2] = alt * np.sin(lat)
+
         self.vertices = self.vertices.reshape(nr * nc, 3)
+
+        # rotate so that z goes through the middle of the selection
+        r1 = R.from_rotvec(np.radians(np.array([0, 0, -np.mean(dem.x)])))
+        r2 = R.from_rotvec(np.radians(np.array([0, np.mean(dem.y - 90), 0])))
+        self.vertices = r2.apply(r1.apply(self.vertices))
 
         self.notif.clear_output()
         np.savez('dem.npz', dem=self.vertices)
@@ -97,7 +113,9 @@ class Dashboard:
         with self.notif:
             display(local_file)
 
+    def show_dem2d(self, dem):
         fig = dem.plot.imshow(vmin=np.nanmin(dem), vmax=np.nanmax(dem))
+        self.dem2d.clear_output()
         with self.dem2d:
             display(fig)
             plt.show()
@@ -123,6 +141,7 @@ class Dashboard:
 
         colored_mesh = IsoColor(mesh, input=('height', 'value'), min=np.nanmin(dem.values), max=np.nanmax(dem.values))
 
+        self.dem3d.clear_output()
         with self.dem3d:
             display(Scene([colored_mesh]))
 

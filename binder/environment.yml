@@ -5,9 +5,13 @@ dependencies:
   - voila
   - ipyleaflet
   - xarray
+  - scipy
   - ipygany
   - matplotlib
   - gdal
   - zarr
   - requests
   - tqdm
+  - pip
+  - pip:
+    - ipyspin
