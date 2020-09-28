@@ -29,6 +29,7 @@ class Dashboard:
         self.dem3d = dem3d
         self.tile_dir = 'dem_tiles'
         self.spin = Spinner()
+        self.spin.class_name = 'dem3d_spinner'
 
     def start(self):
         self.draw_control = DrawControl()
