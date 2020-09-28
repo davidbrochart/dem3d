@@ -12,9 +12,10 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import zarr
 import xarray as xr
-from ipygany import Scene, PolyMesh, IsoColor, Component
+from ipygany import Scene, PolyMesh, IsoColor, Component, Warp
 from ipyleaflet import DrawControl
 from ipyspin import Spinner
+from ipywidgets import VBox, FloatSlider, jslink
 import matplotlib.pyplot as plt
 from IPython.display import display, FileLink
 
@@ -28,8 +29,6 @@ class Dashboard:
         self.dem3d = dem3d
         self.tile_dir = 'dem_tiles'
         self.spin = Spinner()
-        self.spin.layout.height = '500px'
-        self.spin.layout.width = '500px'
 
     def start(self):
         self.draw_control = DrawControl()
@@ -91,21 +90,24 @@ class Dashboard:
 
     def download_link(self, dem):
         lon, lat = np.meshgrid(np.radians(dem.x), np.radians(dem.y), sparse=True)
-        alt = np.where(np.isnan(dem.values), 0, dem.values) + 6371e3
+        r = 6371e3
+        f = np.where(np.isnan(dem.values), 0, dem.values) + r
 
         nr, nc = len(dem.y), len(dem.x)
 
         self.vertices = np.empty((nr, nc, 3), dtype='float32')
-        self.vertices[:, :, 0] = alt * np.cos(lat) * np.cos(lon)
-        self.vertices[:, :, 1] = alt * np.cos(lat) * np.sin(lon)
-        self.vertices[:, :, 2] = alt * np.sin(lat)
+        self.vertices[:, :, 0] = f * np.cos(lat) * np.cos(lon)
+        self.vertices[:, :, 1] = f * np.cos(lat) * np.sin(lon)
+        self.vertices[:, :, 2] = f * np.sin(lat)
 
         self.vertices = self.vertices.reshape(nr * nc, 3)
 
         # rotate so that z goes through the middle of the selection
-        r1 = R.from_rotvec(np.radians(np.array([0, 0, -np.mean(dem.x)])))
-        r2 = R.from_rotvec(np.radians(np.array([0, np.mean(dem.y - 90), 0])))
+        r1 = R.from_rotvec(np.radians(np.array([0, 0, -(np.mean(dem.x) + 90)])))
+        r2 = R.from_rotvec(np.radians(np.array([np.mean(dem.y) - 90, 0, 0])))
         self.vertices = r2.apply(r1.apply(self.vertices))
+        self.vertices[:, 2] -= r
+        self.alt = self.vertices[:, 2].reshape(nr, nc)
 
         self.notif.clear_output()
         np.savez('dem.npz', dem=self.vertices)
@@ -131,7 +133,7 @@ class Dashboard:
         triangle_indices[:, :, :, 2] = r[1:, :-1, None]
         triangle_indices.shape = (-1, 3)
 
-        height_component = Component(name='value', array=dem.values)
+        height_component = Component(name='value', array=self.alt)
 
         mesh = PolyMesh(
             vertices=self.vertices,
@@ -139,11 +141,15 @@ class Dashboard:
             data={'height': [height_component]}
         )
 
-        colored_mesh = IsoColor(mesh, input=('height', 'value'), min=np.nanmin(dem.values), max=np.nanmax(dem.values))
+        colored_mesh = IsoColor(mesh, input='height', min=np.min(self.alt), max=np.max(self.alt))
+        warped_mesh = Warp(colored_mesh, input=(0, 0, ('height', 'value')), factor=0)
+        warp_slider = FloatSlider(min=0, max=10, value=0, description='Vertical exaggeration', style={'description_width': 'initial'})
+
+        jslink((warped_mesh, 'factor'), (warp_slider, 'value'))
 
         self.dem3d.clear_output()
         with self.dem3d:
-            display(Scene([colored_mesh]))
+            display(VBox((Scene([warped_mesh]), warp_slider)))
 
     def create_zarr_chunk(self, lat, lon, tiles, lat0, lat1, lon0, lon1, z):
         if lat < 0:

@@ -12,6 +12,4 @@ dependencies:
   - zarr
   - requests
   - tqdm
-  - pip
-  - pip:
-    - ipyspin
+  - ipyspin
